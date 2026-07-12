@@ -1,8 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { toE164Zimbabwe, isValidE164 } from '@/lib/phone'
 import type { Profile, Track, UserRole } from '@/types/database'
 import { useRouter } from 'next/navigation'
 
@@ -15,46 +13,41 @@ interface Props {
 
 export default function AdminDashboard({ adminName, profiles, tracks, enrollments }: Props) {
   const router = useRouter()
-  const getSupabase = () => createClient()
+  const getSupabase = () => {
+    const { createClient } = require('@/lib/supabase/client')
+    return createClient()
+  }
 
   const [tab, setTab] = useState<'people' | 'enrollments' | 'tracks'>('people')
-  const [showAddPerson, setShowAddPerson] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
   const [showEnroll, setShowEnroll] = useState(false)
-  const [newPhone, setNewPhone] = useState('')
-  const [newName, setNewName] = useState('')
-  const [newRole, setNewRole] = useState<UserRole>('disciple')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteName, setInviteName] = useState('')
+  const [inviteRole, setInviteRole] = useState<UserRole>('disciple')
   const [enrollDiscipleId, setEnrollDiscipleId] = useState('')
   const [enrollDisciplerId, setEnrollDisciplerId] = useState('')
   const [enrollTrackId, setEnrollTrackId] = useState('')
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [saving, setSaving] = useState(false)
 
   const disciplers = profiles.filter((p) => p.role === 'discipler')
   const disciples = profiles.filter((p) => ['disciple', 'graduate'].includes(p.role))
 
-  async function preRegister() {
-    setError('')
+  async function sendInvite() {
+    setError(''); setSuccess('')
     setSaving(true)
-    const e164 = toE164Zimbabwe(newPhone)
-    if (!isValidE164(e164)) { setError('Invalid phone number'); setSaving(false); return }
-
-    const { data: authData, error: authErr } = await getSupabase().auth.admin.createUser({
-      phone: e164,
-      user_metadata: { full_name: newName, role: newRole },
-      phone_confirm: true,
+    const res = await fetch('/api/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inviteEmail, full_name: inviteName, role: inviteRole }),
     })
-    if (authErr) {
-      // Fallback: insert directly into profiles (admin must create auth user via dashboard)
-      const { error: profileErr } = await getSupabase().from('profiles').insert({
-        phone: e164, full_name: newName, role: newRole,
-      })
-      if (profileErr) { setError(profileErr.message); setSaving(false); return }
-    }
-
+    const data = await res.json()
     setSaving(false)
-    setShowAddPerson(false)
-    setNewPhone(''); setNewName(''); setNewRole('disciple')
-    router.refresh()
+    if (!res.ok) { setError(data.error); return }
+    setSuccess(`Invite sent to ${inviteEmail}`)
+    setShowInvite(false)
+    setInviteEmail(''); setInviteName(''); setInviteRole('disciple')
   }
 
   async function changeRole(profileId: string, role: UserRole) {
@@ -63,7 +56,7 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
   }
 
   async function createEnrollment() {
-    setError('')
+    setError(''); setSuccess('')
     setSaving(true)
     const { error: err } = await getSupabase().from('enrollments').insert({
       disciple_id: enrollDiscipleId,
@@ -73,6 +66,7 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
     })
     setSaving(false)
     if (err) { setError(err.message); return }
+    setSuccess('Enrollment created.')
     setShowEnroll(false)
     setEnrollDiscipleId(''); setEnrollDisciplerId(''); setEnrollTrackId('')
     router.refresh()
@@ -85,7 +79,6 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
 
   return (
     <div className="min-h-screen bg-stone-50">
-      {/* Header */}
       <header className="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between">
         <div>
           <h1 className="font-bold text-stone-900">Fishers of Men</h1>
@@ -95,7 +88,6 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
       </header>
 
       <div className="max-w-5xl mx-auto p-6">
-        {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-stone-100 rounded-lg p-1 w-fit">
           {(['people', 'enrollments', 'tracks'] as const).map((t) => (
             <button
@@ -110,9 +102,8 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
           ))}
         </div>
 
-        {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
-        )}
+        {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
+        {success && <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">{success}</div>}
 
         {/* People tab */}
         {tab === 'people' && (
@@ -120,31 +111,35 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-stone-900">People ({profiles.length})</h2>
               <button
-                onClick={() => setShowAddPerson(true)}
+                onClick={() => setShowInvite(true)}
                 className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700"
               >
-                + Pre-register
+                + Invite by email
               </button>
             </div>
 
-            {showAddPerson && (
+            {showInvite && (
               <div className="mb-4 p-4 bg-white rounded-xl border border-stone-200 space-y-3">
-                <h3 className="font-medium text-stone-900 text-sm">Pre-register person</h3>
+                <div>
+                  <h3 className="font-medium text-stone-900 text-sm mb-0.5">Invite new member</h3>
+                  <p className="text-xs text-stone-400">They will receive an email to set their password and join.</p>
+                </div>
                 <input
                   placeholder="Full name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
                   className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
                 />
                 <input
-                  placeholder="Phone (e.g. 0771234567)"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
+                  type="email"
+                  placeholder="Email address"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
                   className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
                 />
                 <select
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as UserRole)}
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as UserRole)}
                   className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
                 >
                   <option value="disciple">Disciple</option>
@@ -153,20 +148,29 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
                   <option value="admin">Admin</option>
                 </select>
                 <div className="flex gap-2">
-                  <button onClick={preRegister} disabled={saving} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm disabled:opacity-50">
-                    {saving ? 'Saving…' : 'Save'}
+                  <button
+                    onClick={sendInvite}
+                    disabled={saving || !inviteEmail || !inviteName}
+                    className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm disabled:opacity-50"
+                  >
+                    {saving ? 'Sending…' : 'Send invite'}
                   </button>
-                  <button onClick={() => setShowAddPerson(false)} className="text-sm text-stone-500">Cancel</button>
+                  <button onClick={() => setShowInvite(false)} className="text-sm text-stone-500">Cancel</button>
                 </div>
               </div>
             )}
+
+            {/* Direct database note */}
+            <div className="mb-4 p-3 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-500">
+              You can also add members directly in the Supabase dashboard → Authentication → Users → Add user, then set their role in the <code className="font-mono bg-stone-100 px-1 rounded">profiles</code> table.
+            </div>
 
             <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 border-b border-stone-200">
                   <tr>
                     <th className="text-left px-4 py-3 font-medium text-stone-600">Name</th>
-                    <th className="text-left px-4 py-3 font-medium text-stone-600">Phone</th>
+                    <th className="text-left px-4 py-3 font-medium text-stone-600">Email</th>
                     <th className="text-left px-4 py-3 font-medium text-stone-600">Role</th>
                     <th className="text-left px-4 py-3 font-medium text-stone-600">Change role</th>
                   </tr>
@@ -175,7 +179,7 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
                   {profiles.map((p) => (
                     <tr key={p.id} className="hover:bg-stone-50">
                       <td className="px-4 py-3 font-medium text-stone-900">{p.full_name}</td>
-                      <td className="px-4 py-3 text-stone-500">{p.phone ?? '—'}</td>
+                      <td className="px-4 py-3 text-stone-500">{p.email ?? '—'}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                           p.role === 'admin' ? 'bg-purple-100 text-purple-700' :
@@ -233,7 +237,11 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
                   {tracks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
                 </select>
                 <div className="flex gap-2">
-                  <button onClick={createEnrollment} disabled={saving || !enrollDiscipleId || !enrollDisciplerId || !enrollTrackId} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm disabled:opacity-50">
+                  <button
+                    onClick={createEnrollment}
+                    disabled={saving || !enrollDiscipleId || !enrollDisciplerId || !enrollTrackId}
+                    className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm disabled:opacity-50"
+                  >
                     {saving ? 'Saving…' : 'Enroll'}
                   </button>
                   <button onClick={() => setShowEnroll(false)} className="text-sm text-stone-500">Cancel</button>
