@@ -23,14 +23,15 @@ test('signup role comes from a server-created invitation, never user metadata', 
   assert.match(sql, /DELETE FROM public\.invitations/i)
 })
 
-test('normal invitation flow has an explicit non-admin role allowlist', () => {
-  const route = read('src/app/api/invite/route.ts')
+test('phone provisioning validates roles and remains administrator-only', () => {
+  const service = read('src/lib/accounts/provision.ts')
+  const runtime = read('src/lib/accounts/runtime.ts')
+  const migration = read('supabase/migrations/20260821_phone_auth_and_account_admin.sql')
 
-  assert.match(route, /INVITABLE_ROLES/)
-  assert.match(route, /'disciple'/)
-  assert.match(route, /'discipler'/)
-  assert.match(route, /'graduate'/)
-  assert.doesNotMatch(route, /data:\s*\{\s*full_name,\s*role\s*\}/)
+  assert.match(service, /\['admin', 'discipler', 'disciple'\]\.includes\(input\.role\)/)
+  assert.match(runtime, /data\.role !== 'admin'/)
+  assert.match(migration, /VALUES \(NEW\.id, NEW\.phone, NEW\.email, v_name, 'disciple'/)
+  assert.doesNotMatch(migration, /raw_user_meta_data->>'role'/)
 })
 
 test('Supabase clients use explicit environment validation without placeholders', () => {
