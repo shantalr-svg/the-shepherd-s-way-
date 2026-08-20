@@ -11,8 +11,31 @@ export interface Profile {
   full_name: string
   role: UserRole
   discipler_id: string | null
+  must_change_password: boolean
+  is_active: boolean
+  created_by: string | null
+  password_initialized_at: string | null
+  deactivated_at: string | null
   created_at: string
   updated_at: string
+}
+
+export type AdminAuditAction =
+  | 'account_created'
+  | 'admin_promoted'
+  | 'role_changed'
+  | 'password_reset'
+  | 'account_activated'
+  | 'account_deactivated'
+  | 'initial_password_changed'
+
+export interface AdminAuditLog {
+  id: string
+  actor_profile_id: string | null
+  target_profile_id: string | null
+  action: AdminAuditAction
+  details: Record<string, unknown>
+  created_at: string
 }
 
 export interface Track {
