@@ -16,7 +16,7 @@ export function getSupabaseServiceRoleKey() {
 
   if (!serviceRoleKey) {
     throw new Error(
-      'Missing Supabase configuration: SUPABASE_SERVICE_ROLE_KEY is required for invitations.'
+      'Missing Supabase configuration: SUPABASE_SERVICE_ROLE_KEY is required for server-side account administration.'
     )
   }
 
