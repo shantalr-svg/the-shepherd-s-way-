@@ -37,43 +37,61 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
   async function sendInvite() {
     setError(''); setSuccess('')
     setSaving(true)
-    const res = await fetch('/api/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail, full_name: inviteName, role: inviteRole }),
-    })
-    const data = await res.json()
-    setSaving(false)
-    if (!res.ok) { setError(data.error); return }
-    setSuccess(`Invite sent to ${inviteEmail}`)
-    setShowInvite(false)
-    setInviteEmail(''); setInviteName(''); setInviteRole('disciple')
+    try {
+      const res = await fetch('/api/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail, full_name: inviteName, role: inviteRole }),
+      })
+      const data = await res.json().catch(() => ({ error: 'Invitation failed' }))
+      if (!res.ok) { setError(data.error ?? 'Invitation failed'); return }
+      setSuccess(`Invite sent to ${inviteEmail}`)
+      setShowInvite(false)
+      setInviteEmail(''); setInviteName(''); setInviteRole('disciple')
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Invitation failed')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function changeRole(profileId: string, role: UserRole) {
-    await getSupabase().from('profiles').update({ role }).eq('id', profileId)
-    router.refresh()
+    setError(''); setSuccess('')
+    try {
+      const { error } = await getSupabase().from('profiles').update({ role }).eq('id', profileId)
+      if (error) { setError(error.message); return }
+      setSuccess('Role updated.')
+      router.refresh()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Role update failed')
+    }
   }
 
   async function createEnrollment() {
     setError(''); setSuccess('')
     setSaving(true)
-    const { error: err } = await getSupabase().from('enrollments').insert({
-      disciple_id: enrollDiscipleId,
-      discipler_id: enrollDisciplerId,
-      track_id: enrollTrackId,
-      status: 'active',
-    })
-    setSaving(false)
-    if (err) { setError(err.message); return }
-    setSuccess('Enrollment created.')
-    setShowEnroll(false)
-    setEnrollDiscipleId(''); setEnrollDisciplerId(''); setEnrollTrackId('')
-    router.refresh()
+    try {
+      const { error: err } = await getSupabase().from('enrollments').insert({
+        disciple_id: enrollDiscipleId,
+        discipler_id: enrollDisciplerId,
+        track_id: enrollTrackId,
+        status: 'active',
+      })
+      if (err) { setError(err.message); return }
+      setSuccess('Enrollment created.')
+      setShowEnroll(false)
+      setEnrollDiscipleId(''); setEnrollDisciplerId(''); setEnrollTrackId('')
+      router.refresh()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Enrollment creation failed')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function signOut() {
-    await getSupabase().auth.signOut()
+    const { error } = await getSupabase().auth.signOut()
+    if (error) { setError(error.message); return }
     router.push('/login')
   }
 
@@ -145,7 +163,6 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
                   <option value="disciple">Disciple</option>
                   <option value="discipler">Discipler</option>
                   <option value="graduate">Graduate</option>
-                  <option value="admin">Admin</option>
                 </select>
                 <div className="flex gap-2">
                   <button

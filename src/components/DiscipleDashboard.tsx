@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types/database'
 import { useRouter } from 'next/navigation'
@@ -12,14 +13,29 @@ interface Props {
 export default function DiscipleDashboard({ profile, enrollments }: Props) {
   const router = useRouter()
   const getSupabase = () => createClient()
+  const [error, setError] = useState('')
+  const [savingTaskId, setSavingTaskId] = useState<string | null>(null)
 
   async function markTaskDone(taskId: string) {
-    await getSupabase().from('tasks').update({ completed_at: new Date().toISOString() }).eq('id', taskId)
-    router.refresh()
+    setError('')
+    setSavingTaskId(taskId)
+    try {
+      const { error } = await getSupabase()
+        .from('tasks')
+        .update({ completed_at: new Date().toISOString() })
+        .eq('id', taskId)
+      if (error) { setError(error.message); return }
+      router.refresh()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Task could not be completed')
+    } finally {
+      setSavingTaskId(null)
+    }
   }
 
   async function signOut() {
-    await getSupabase().auth.signOut()
+    const { error } = await getSupabase().auth.signOut()
+    if (error) { setError(error.message); return }
     router.push('/login')
   }
 
@@ -36,6 +52,7 @@ export default function DiscipleDashboard({ profile, enrollments }: Props) {
       </header>
 
       <div className="max-w-2xl mx-auto p-6 space-y-6">
+        {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
         {/* Discipler info */}
         {profile.discipler && (
           <div className="bg-white rounded-xl border border-stone-200 p-4">
@@ -65,6 +82,7 @@ export default function DiscipleDashboard({ profile, enrollments }: Props) {
                     <div key={task.id} className={`flex items-start gap-3 p-3 rounded-lg ${task.completed_at ? 'bg-stone-50' : 'bg-amber-50'}`}>
                       <button
                         onClick={() => !task.completed_at && markTaskDone(task.id)}
+                        disabled={savingTaskId === task.id}
                         className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 ${
                           task.completed_at
                             ? 'bg-emerald-500 border-emerald-500'

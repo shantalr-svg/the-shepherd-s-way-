@@ -20,50 +20,73 @@ export default function DisciplerDashboard({ profile, enrollments }: Props) {
   const [taskTitle, setTaskTitle] = useState('')
   const [taskType, setTaskType] = useState('scripture')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState<'session' | 'task'>('session')
 
   const selectedEnrollment = enrollments.find((e) => e.id === selected)
 
   async function logSession() {
     if (!selected) return
+    setError('')
     setSaving(true)
-    await getSupabase().from('sessions').insert({
-      enrollment_id: selected,
-      session_date: new Date().toISOString().split('T')[0],
-      attended,
-      notes: sessionNotes,
-    })
-    setSaving(false)
-    setSessionNotes('')
-    router.refresh()
+    try {
+      const { error } = await getSupabase().from('sessions').insert({
+        enrollment_id: selected,
+        session_date: new Date().toISOString().split('T')[0],
+        attended,
+        notes: sessionNotes,
+      })
+      if (error) { setError(error.message); return }
+      setSessionNotes('')
+      router.refresh()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Session could not be saved')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function addTask() {
     if (!selected || !taskTitle.trim()) return
+    setError('')
     setSaving(true)
-    await getSupabase().from('tasks').insert({
-      enrollment_id: selected,
-      type: taskType,
-      title: taskTitle,
-    })
-    setSaving(false)
-    setTaskTitle('')
-    router.refresh()
+    try {
+      const { error } = await getSupabase().from('tasks').insert({
+        enrollment_id: selected,
+        type: taskType,
+        title: taskTitle,
+      })
+      if (error) { setError(error.message); return }
+      setTaskTitle('')
+      router.refresh()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Task could not be assigned')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function completeEnrollment(enrollmentId: string) {
+    setError('')
     setSaving(true)
-    await getSupabase().from('enrollments').update({
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-    }).eq('id', enrollmentId)
-    setSaving(false)
-    setSelected(null)
-    router.refresh()
+    try {
+      const { error } = await getSupabase().from('enrollments').update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+      }).eq('id', enrollmentId)
+      if (error) { setError(error.message); return }
+      setSelected(null)
+      router.refresh()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Enrollment could not be completed')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function signOut() {
-    await getSupabase().auth.signOut()
+    const { error } = await getSupabase().auth.signOut()
+    if (error) { setError(error.message); return }
     router.push('/login')
   }
 
@@ -81,6 +104,7 @@ export default function DisciplerDashboard({ profile, enrollments }: Props) {
       </header>
 
       <div className="max-w-4xl mx-auto p-6 grid md:grid-cols-2 gap-6">
+        {error && <div className="md:col-span-2 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
         {/* Disciple list */}
         <div>
           <h2 className="font-semibold text-stone-900 mb-3">My Disciples ({active.length} active)</h2>
