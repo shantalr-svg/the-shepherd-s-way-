@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Profile, Track, UserRole } from '@/types/database'
 import { useRouter } from 'next/navigation'
+import AccountManagement from '@/components/AccountManagement'
 
 interface Props {
   adminName: string
@@ -18,7 +19,7 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
     return createClient()
   }
 
-  const [tab, setTab] = useState<'people' | 'enrollments' | 'tracks'>('people')
+  const [tab, setTab] = useState<'accounts' | 'people' | 'enrollments' | 'tracks'>('accounts')
   const [showInvite, setShowInvite] = useState(false)
   const [showEnroll, setShowEnroll] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
@@ -107,7 +108,7 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
 
       <div className="max-w-5xl mx-auto p-6">
         <div className="flex gap-1 mb-6 bg-stone-100 rounded-lg p-1 w-fit">
-          {(['people', 'enrollments', 'tracks'] as const).map((t) => (
+          {(['accounts', 'enrollments', 'tracks'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -122,6 +123,8 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
 
         {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
         {success && <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">{success}</div>}
+
+        {tab === 'accounts' && <AccountManagement profiles={profiles} />}
 
         {/* People tab */}
         {tab === 'people' && (
