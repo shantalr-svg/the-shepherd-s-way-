@@ -9,11 +9,13 @@ export default async function AdminPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, full_name')
+    .select('role, full_name, is_active, must_change_password')
     .eq('auth_id', user.id)
     .single()
 
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  if (!profile?.is_active) redirect('/login')
+  if (profile.must_change_password) redirect('/initial-password')
+  if (profile.role !== 'admin') redirect('/dashboard')
 
   const [{ data: profiles }, { data: tracks }, { data: enrollments }] = await Promise.all([
     supabase.from('profiles').select('*').order('full_name'),

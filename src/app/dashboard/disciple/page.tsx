@@ -13,7 +13,9 @@ export default async function DisciplePage() {
     .eq('auth_id', user.id)
     .single()
 
-  if (!['disciple', 'graduate'].includes(profile?.role)) redirect('/dashboard')
+  if (!profile?.is_active) redirect('/login')
+  if (profile.must_change_password) redirect('/initial-password')
+  if (!['disciple', 'graduate'].includes(profile.role)) redirect('/dashboard')
 
   const { data: enrollments } = await supabase
     .from('enrollments')
