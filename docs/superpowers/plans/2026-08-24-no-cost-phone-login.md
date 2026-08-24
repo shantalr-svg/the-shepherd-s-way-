@@ -26,13 +26,16 @@
 ## File Structure
 
 - `src/lib/phone.ts`: normalize and format Zimbabwean numbers; produce the internal Supabase email/password credentials.
+- `src/lib/phone-login.ts`: send derived email/password credentials through the Supabase password-login boundary and surface Auth errors.
 - `src/app/login/page.tsx`: collect a phone number and password, then send derived email/password credentials to Supabase.
 - `src/lib/accounts/provision.ts`: validate account requests and pass an internal email identifier to the Auth dependency without exposing it in results or audit records.
+- `src/lib/accounts/auth-user.ts`: create a confirmed internal-email Auth user through an injected Supabase Admin boundary.
 - `src/lib/accounts/runtime.ts`: create confirmed email/password Auth users and clear synthetic profile email values.
 - `scripts/bootstrap-users.ts`: use the same confirmed email/password Auth creation path for the private 20-user bootstrap.
 - `tests/phone.test.ts`: unit coverage for normalization and deterministic credential construction.
+- `tests/phone-login.test.ts`: behavioral coverage for the exact Supabase login payload and Auth error propagation.
+- `tests/auth-user.test.ts`: behavioral coverage for confirmed internal-email Auth creation and error propagation.
 - `tests/provision-account.test.ts`: provisioning contract, output secrecy, rollback, and audit coverage.
-- `tests/security-patch.test.mjs`: source-level regression checks that production runtimes do not use native phone Auth during the no-cost phase.
 - `README.md`: exact hosted Supabase settings, environment variables, migration state, bootstrap sequence, and future SMS upgrade note.
 
 ---
@@ -41,13 +44,15 @@
 
 **Files:**
 - Modify: `src/lib/phone.ts`
+- Create: `src/lib/phone-login.ts`
 - Modify: `src/app/login/page.tsx`
 - Test: `tests/phone.test.ts`
-- Test: `tests/security-patch.test.mjs`
+- Test: `tests/phone-login.test.ts`
 
 **Interfaces:**
 - Consumes: `normalizeZimbabwePhone(input: string): string`
 - Produces: `createPhonePasswordCredentials(phone: string, password: string): { email: string; password: string }`
+- Produces: `signInWithPhonePassword(auth, phone, password): Promise<void>`
 
 - [ ] **Step 1: Write the failing credential-mapping test**
 
@@ -100,18 +105,43 @@ Run the Step 2 command.
 
 Expected: all `tests/phone.test.ts` cases PASS.
 
-- [ ] **Step 5: Add a failing source regression for the login boundary**
+- [ ] **Step 5: Add a failing behavior test for the login boundary**
 
-Add to `tests/security-patch.test.mjs`:
+Create `tests/phone-login.test.ts`:
 
-```js
-test('login derives an internal email credential from the phone form', () => {
-  const login = read('src/app/login/page.tsx')
+```ts
+import assert from 'node:assert/strict'
+import test from 'node:test'
 
-  assert.match(login, /createPhonePasswordCredentials\(phone, password\)/)
-  assert.match(login, /signInWithPassword\(credentials\)/)
-  assert.doesNotMatch(login, /signInWithPassword\(\{\s*phone/i)
-  assert.doesNotMatch(login, /type=["']email["']/i)
+import { signInWithPhonePassword } from '../src/lib/phone-login.ts'
+
+test('signs in with the derived internal email and unchanged password', async () => {
+  let received: unknown
+  const auth = {
+    signInWithPassword: async (credentials: unknown) => {
+      received = credentials
+      return { error: null }
+    },
+  }
+
+  await signInWithPhonePassword(auth, '077 282 9203', 'TemporaryPass1!xx')
+
+  assert.deepEqual(received, {
+    email: '263772829203@phone.invalid',
+    password: 'TemporaryPass1!xx',
+  })
+})
+
+test('surfaces the Supabase password-login error', async () => {
+  const expected = new Error('Invalid login credentials')
+  const auth = {
+    signInWithPassword: async () => ({ error: expected }),
+  }
+
+  await assert.rejects(
+    signInWithPhonePassword(auth, '0772829203', 'wrong-password'),
+    expected,
+  )
 })
 ```
 
@@ -120,23 +150,22 @@ test('login derives an internal email credential from the phone form', () => {
 Run:
 
 ```powershell
-node --experimental-strip-types --test --test-isolation=none tests/security-patch.test.mjs
+node --experimental-strip-types --test --test-isolation=none tests/phone-login.test.ts
 ```
 
-Expected: FAIL because the login page still passes `{ phone, password }` directly.
+Expected: FAIL because `src/lib/phone-login.ts` does not exist.
 
-- [ ] **Step 7: Update the login page to use the shared credentials**
+- [ ] **Step 7: Implement the tested login boundary and update the login page**
+
+Create `src/lib/phone-login.ts` with a structural Auth interface, call `createPhonePasswordCredentials`, await `signInWithPassword`, and throw the returned error when it is non-null.
 
 In `src/app/login/page.tsx`, replace the normalization import and Auth call with:
 
 ```ts
-import { createPhonePasswordCredentials } from '@/lib/phone'
+import { signInWithPhonePassword } from '@/lib/phone-login'
 
 // Inside login():
-const credentials = createPhonePasswordCredentials(phone, password)
-const { error: signInError } = await createClient().auth.signInWithPassword(
-  credentials,
-)
+await signInWithPhonePassword(createClient().auth, phone, password)
 ```
 
 Keep the existing phone input, password input, loading/error handling, and dashboard redirect unchanged.
@@ -146,7 +175,7 @@ Keep the existing phone input, password input, loading/error handling, and dashb
 Run:
 
 ```powershell
-node --experimental-strip-types --test --test-isolation=none tests/phone.test.ts tests/security-patch.test.mjs
+node --experimental-strip-types --test --test-isolation=none tests/phone.test.ts tests/phone-login.test.ts
 npx.cmd tsc --noEmit
 ```
 
@@ -155,7 +184,7 @@ Expected: tests PASS and TypeScript exits 0.
 - [ ] **Step 9: Commit the login boundary**
 
 ```powershell
-git add -- src/lib/phone.ts src/app/login/page.tsx tests/phone.test.ts tests/security-patch.test.mjs
+git add -- src/lib/phone.ts src/lib/phone-login.ts src/app/login/page.tsx tests/phone.test.ts tests/phone-login.test.ts
 git commit -m "feat: map phone login to internal auth identifiers"
 ```
 
@@ -165,10 +194,11 @@ git commit -m "feat: map phone login to internal auth identifiers"
 
 **Files:**
 - Modify: `src/lib/accounts/provision.ts`
+- Create: `src/lib/accounts/auth-user.ts`
 - Modify: `src/lib/accounts/runtime.ts`
 - Modify: `scripts/bootstrap-users.ts`
+- Test: `tests/auth-user.test.ts`
 - Test: `tests/provision-account.test.ts`
-- Test: `tests/security-patch.test.mjs`
 
 **Interfaces:**
 - Consumes: `createPhonePasswordCredentials(phone, password)` from Task 1
@@ -236,48 +266,40 @@ Run the Step 2 command.
 
 Expected: all provisioning, rollback, duplicate, and password-reset tests PASS.
 
-- [ ] **Step 5: Add failing runtime regressions**
+- [ ] **Step 5: Add a failing behavior test for confirmed Auth creation**
 
-Extend `phone provisioning validates roles and remains administrator-only` in `tests/security-patch.test.mjs`:
+Create `tests/auth-user.test.ts` with a fake Admin boundary that records its input, then assert:
 
-```js
-const bootstrap = read('scripts/bootstrap-users.ts')
-
-for (const source of [runtime, bootstrap]) {
-  assert.match(source, /email_confirm:\s*true/)
-  assert.doesNotMatch(source, /phone_confirm:\s*true/)
-  assert.doesNotMatch(source, /createUser\(\{\s*phone/i)
-}
-assert.match(runtime, /email:\s*null/)
-assert.match(bootstrap, /email:\s*null/)
+```ts
+assert.deepEqual(received, {
+  email: '263772829203@phone.invalid',
+  password: 'TemporaryPass1!xx',
+  email_confirm: true,
+  user_metadata: { full_name: 'Shantal Renco' },
+})
+assert.deepEqual(result, { authId: 'auth-1' })
 ```
+
+Add separate cases proving a returned Auth error is thrown and a missing `data.user` throws `Auth user creation failed.`
 
 - [ ] **Step 6: Run the source regression and verify it fails**
 
 Run:
 
 ```powershell
-node --experimental-strip-types --test --test-isolation=none tests/security-patch.test.mjs
+node --experimental-strip-types --test --test-isolation=none tests/auth-user.test.ts
 ```
 
-Expected: FAIL because both trusted runtimes still create confirmed phone users.
+Expected: FAIL because `src/lib/accounts/auth-user.ts` does not exist.
 
-- [ ] **Step 7: Update the application account runtime**
+- [ ] **Step 7: Implement and use the shared confirmed-Auth-user function**
+
+Create `src/lib/accounts/auth-user.ts` with `createConfirmedInternalAuthUser(admin, input)`. It must call `admin.createUser` with the exact payload asserted in Step 5, throw any returned error, reject a missing user, and return only `{ authId: data.user.id }`.
 
 In `src/lib/accounts/runtime.ts`, replace the Auth creation dependency with:
 
 ```ts
-createAuthUser: async ({ email, password, fullName }) => {
-  const { data, error } = await client.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { full_name: fullName },
-  })
-  fail(error)
-  if (!data.user) throw new Error('Auth user creation failed.')
-  return { authId: data.user.id }
-},
+createAuthUser: (input) => createConfirmedInternalAuthUser(client.auth.admin, input),
 ```
 
 Include `email: null` in `secureProfile`'s trusted profile update so the synthetic address is not retained in `profiles.email`.
@@ -287,7 +309,7 @@ Include `email: null` in `secureProfile`'s trusted profile update so the synthet
 In `scripts/bootstrap-users.ts`:
 
 1. Add `email?: string | null` to the local `profiles.Update` type.
-2. Change `createAuthUser` to use `{ email, password, email_confirm: true, user_metadata }`.
+2. Change `createAuthUser` to call `createConfirmedInternalAuthUser(client.auth.admin, input)`.
 3. Include `email: null` in `secureProfile`'s profile update.
 
 Keep the private CSV columns exactly:
@@ -301,7 +323,7 @@ full_name,phone,role,temporary_password
 Run:
 
 ```powershell
-node --experimental-strip-types --test --test-isolation=none tests/provision-account.test.ts tests/bootstrap-users.test.ts tests/security-patch.test.mjs
+node --experimental-strip-types --test --test-isolation=none tests/auth-user.test.ts tests/provision-account.test.ts tests/bootstrap-users.test.ts
 npx.cmd tsc --noEmit
 ```
 
@@ -310,7 +332,7 @@ Expected: all tests PASS and TypeScript exits 0.
 - [ ] **Step 10: Commit trusted provisioning**
 
 ```powershell
-git add -- src/lib/accounts/provision.ts src/lib/accounts/runtime.ts scripts/bootstrap-users.ts tests/provision-account.test.ts tests/security-patch.test.mjs
+git add -- src/lib/accounts/auth-user.ts src/lib/accounts/provision.ts src/lib/accounts/runtime.ts scripts/bootstrap-users.ts tests/auth-user.test.ts tests/provision-account.test.ts
 git commit -m "feat: provision no-cost phone login accounts"
 ```
 
@@ -320,40 +342,12 @@ git commit -m "feat: provision no-cost phone login accounts"
 
 **Files:**
 - Modify: `README.md`
-- Test: `tests/security-patch.test.mjs`
 
 **Interfaces:**
 - Consumes: Supabase project reference, migrations, `.env.local`, ignored bootstrap input, and the `bootstrap:users` script
 - Produces: one authoritative deployment sequence that never instructs an operator to enable native Phone auth in the no-cost phase
 
-- [ ] **Step 1: Add a failing documentation regression**
-
-Add to `tests/security-patch.test.mjs`:
-
-```js
-test('deployment instructions preserve the no-cost Auth configuration', () => {
-  const readme = read('README.md')
-
-  assert.match(readme, /Email provider.*enabled/is)
-  assert.match(readme, /Phone provider.*disabled/is)
-  assert.match(readme, /public signup.*disabled/is)
-  assert.match(readme, /phone\.invalid/)
-  assert.match(readme, /SUPABASE_SERVICE_ROLE_KEY/)
-  assert.doesNotMatch(readme, /enable (?:native )?phone auth/i)
-})
-```
-
-- [ ] **Step 2: Run the documentation regression and verify it fails**
-
-Run:
-
-```powershell
-node --experimental-strip-types --test --test-isolation=none tests/security-patch.test.mjs
-```
-
-Expected: FAIL because the current README is the default Next.js template.
-
-- [ ] **Step 3: Replace the template README with the project runbook**
+- [ ] **Step 1: Replace the template README with the project runbook**
 
 Document these exact sections in `README.md`:
 
@@ -369,22 +363,25 @@ Document these exact sections in `README.md`:
 
 Do not include keys, real contact lists, generated passwords, or a real credential-output path.
 
-- [ ] **Step 4: Run documentation and full static checks**
+- [ ] **Step 2: Review the runbook against the approved settings**
+
+Confirm manually that Email is documented as enabled, Phone and public signup as disabled, `phone.invalid` as Auth-only, all three environment variables are listed, and no real secrets or contacts appear. Human-facing prose intentionally has no source-text unit test.
+
+- [ ] **Step 3: Run full static checks**
 
 Run:
 
 ```powershell
-node --experimental-strip-types --test --test-isolation=none tests/security-patch.test.mjs
 npx.cmd tsc --noEmit
 npm.cmd run lint
 ```
 
 Expected: test PASS; TypeScript and lint exit 0.
 
-- [ ] **Step 5: Commit the runbook**
+- [ ] **Step 4: Commit the runbook**
 
 ```powershell
-git add -- README.md tests/security-patch.test.mjs
+git add -- README.md
 git commit -m "docs: document no-cost phone login deployment"
 ```
 
@@ -460,4 +457,3 @@ Report:
 - Supabase must remain Email enabled, Phone disabled, public signup disabled;
 - the branch may be pushed under the existing authorization;
 - creating the 20 external Auth accounts and their one-time passwords is a separate, sensitive action that requires action-time confirmation after deployment credentials are configured.
-
