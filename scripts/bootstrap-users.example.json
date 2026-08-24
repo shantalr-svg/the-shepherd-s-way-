@@ -1,0 +1,5 @@
+[
+  { "fullName": "Example Admin One", "phone": "0770000001", "role": "admin" },
+  { "fullName": "Example Admin Two", "phone": "0770000002", "role": "admin" },
+  { "fullName": "Example Discipler 01", "phone": "0710000001", "role": "discipler" }
+]
