@@ -2,12 +2,20 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Profile } from '@/types/database'
+import type { Enrollment, Profile, Session, Task, Track } from '@/types/database'
 import { useRouter } from 'next/navigation'
 
 interface Props {
-  profile: Profile & { discipler?: Profile }
-  enrollments: any[]
+  profile: Profile & {
+    discipler: Pick<Profile, 'full_name' | 'phone'> | null
+  }
+  enrollments: DiscipleEnrollment[]
+}
+
+type DiscipleEnrollment = Enrollment & {
+  track: Pick<Track, 'title' | 'description'> | null
+  tasks: Task[]
+  sessions: Session[]
 }
 
 export default function DiscipleDashboard({ profile, enrollments }: Props) {
@@ -57,8 +65,8 @@ export default function DiscipleDashboard({ profile, enrollments }: Props) {
         {profile.discipler && (
           <div className="bg-white rounded-xl border border-stone-200 p-4">
             <p className="text-xs text-stone-500 mb-1">Your discipler</p>
-            <p className="font-semibold text-stone-900">{(profile.discipler as any).full_name}</p>
-            <p className="text-sm text-stone-500">{(profile.discipler as any).phone}</p>
+            <p className="font-semibold text-stone-900">{profile.discipler.full_name}</p>
+            <p className="text-sm text-stone-500">{profile.discipler.phone}</p>
           </div>
         )}
 
@@ -78,7 +86,7 @@ export default function DiscipleDashboard({ profile, enrollments }: Props) {
               <div className="bg-white rounded-xl border border-stone-200 p-4">
                 <h3 className="font-semibold text-stone-900 mb-3">Tasks</h3>
                 <div className="space-y-2">
-                  {active.tasks.map((task: any) => (
+                  {active.tasks.map((task) => (
                     <div key={task.id} className={`flex items-start gap-3 p-3 rounded-lg ${task.completed_at ? 'bg-stone-50' : 'bg-amber-50'}`}>
                       <button
                         onClick={() => !task.completed_at && markTaskDone(task.id)}
@@ -112,7 +120,7 @@ export default function DiscipleDashboard({ profile, enrollments }: Props) {
               <div className="bg-white rounded-xl border border-stone-200 p-4">
                 <h3 className="font-semibold text-stone-900 mb-3">Sessions ({active.sessions.length})</h3>
                 <div className="space-y-2">
-                  {active.sessions.slice(0, 5).map((s: any) => (
+                  {active.sessions.slice(0, 5).map((s) => (
                     <div key={s.id} className="flex items-center gap-3 text-sm">
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.attended ? 'bg-emerald-500' : 'bg-stone-300'}`} />
                       <span className="text-stone-600">{new Date(s.session_date).toLocaleDateString()}</span>

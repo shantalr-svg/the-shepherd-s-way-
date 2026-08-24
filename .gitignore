@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# private account bootstrap inputs and one-time credentials
+/work/bootstrap-users*.json
+/outputs/*credentials*.csv

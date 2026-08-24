@@ -33,14 +33,23 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Unauthenticated: redirect to login (allow login and reset-password pages through)
-  if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/reset-password')) {
+  if (!user && pathname !== '/login') {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Authenticated: redirect away from login
-  if (user && pathname === '/login') {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+  if (user) {
+    const { data: profile } = await supabase.from('profiles').select('is_active, must_change_password').eq('auth_id', user.id).single()
+    if (!profile?.is_active) {
+      if (pathname === '/login') return supabaseResponse
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    if (profile.must_change_password && pathname !== '/initial-password') {
+      return NextResponse.redirect(new URL('/initial-password', request.url))
+    }
+    if (!profile.must_change_password && pathname === '/initial-password') {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+    if (pathname === '/login') return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
   return supabaseResponse

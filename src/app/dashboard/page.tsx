@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { resolveAccessDestination } from '@/lib/access-state'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -8,13 +9,9 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, is_active, must_change_password')
     .eq('auth_id', user.id)
     .single()
 
-  switch (profile?.role) {
-    case 'admin':     redirect('/dashboard/admin')
-    case 'discipler': redirect('/dashboard/discipler')
-    default:          redirect('/dashboard/disciple')
-  }
+  redirect(resolveAccessDestination(profile))
 }
