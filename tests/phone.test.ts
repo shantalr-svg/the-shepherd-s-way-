@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { formatZimbabwePhone, normalizeZimbabwePhone } from '../src/lib/phone.ts'
+import {
+  createPhonePasswordCredentials,
+  formatZimbabwePhone,
+  normalizeZimbabwePhone,
+} from '../src/lib/phone.ts'
 
 test('normalizes supported Zimbabwean mobile formats', () => {
   const inputs = [
@@ -35,4 +39,14 @@ test('rejects malformed or non-Zimbabwean numbers', () => {
 
 test('formats a normalized Zimbabwean mobile number for display', () => {
   assert.equal(formatZimbabwePhone('+263772829203'), '+263 77 282 9203')
+})
+
+test('builds deterministic internal Auth credentials without changing the password', () => {
+  assert.deepEqual(
+    createPhonePasswordCredentials('077 282 9203', 'TemporaryPass1!xx'),
+    {
+      email: '263772829203@phone.invalid',
+      password: 'TemporaryPass1!xx',
+    },
+  )
 })

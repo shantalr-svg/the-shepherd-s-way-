@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { normalizeZimbabwePhone } from '@/lib/phone'
+import { signInWithPhonePassword } from '@/lib/phone-login'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
@@ -13,8 +13,7 @@ export default function LoginPage() {
   async function login() {
     setLoading(true); setError('')
     try {
-      const { error: signInError } = await createClient().auth.signInWithPassword({ phone: normalizeZimbabwePhone(phone), password })
-      if (signInError) throw signInError
+      await signInWithPhonePassword(createClient().auth, phone, password)
       router.push('/dashboard'); router.refresh()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Sign in failed.') }
     finally { setLoading(false) }

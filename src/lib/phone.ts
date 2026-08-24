@@ -1,4 +1,5 @@
 const ZIMBABWE_MOBILE_PATTERN = /^\+2637\d{8}$/
+const PHONE_AUTH_DOMAIN = 'phone.invalid'
 
 const INVALID_PHONE_MESSAGE =
   'Enter a valid Zimbabwean mobile number, for example 077 282 9203.'
@@ -23,4 +24,15 @@ export function normalizeZimbabwePhone(input: string): string {
 export function formatZimbabwePhone(input: string): string {
   const normalized = normalizeZimbabwePhone(input)
   return normalized.replace(/^(\+263)(\d{2})(\d{3})(\d{4})$/, '$1 $2 $3 $4')
+}
+
+export function createPhonePasswordCredentials(
+  phone: string,
+  password: string,
+): { email: string; password: string } {
+  const normalizedPhone = normalizeZimbabwePhone(phone)
+  return {
+    email: `${normalizedPhone.slice(1)}@${PHONE_AUTH_DOMAIN}`,
+    password,
+  }
 }
