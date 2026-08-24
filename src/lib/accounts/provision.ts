@@ -1,5 +1,8 @@
 import { generateTemporaryPassword } from '../password.ts'
-import { normalizeZimbabwePhone } from '../phone.ts'
+import {
+  createPhonePasswordCredentials,
+  normalizeZimbabwePhone,
+} from '../phone.ts'
 import type {
   AccountAuditEvent,
   ProvisionAccountInput,
@@ -9,7 +12,7 @@ import type {
 export interface AccountDependencies {
   findProfileByPhone(phone: string): Promise<{ profileId: string } | null>
   createAuthUser(input: {
-    phone: string
+    email: string
     password: string
     fullName: string
   }): Promise<{ authId: string }>
@@ -44,9 +47,12 @@ export async function provisionAccount(
   }
 
   const temporaryPassword = dependencies.generatePassword()
+  const credentials = createPhonePasswordCredentials(
+    normalizedPhone,
+    temporaryPassword,
+  )
   const { authId } = await dependencies.createAuthUser({
-    phone: normalizedPhone,
-    password: temporaryPassword,
+    ...credentials,
     fullName,
   })
 

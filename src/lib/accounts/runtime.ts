@@ -1,6 +1,10 @@
 import 'server-only'
 
 import { createAdminAccountHandlers } from './admin-handlers'
+import {
+  createConfirmedInternalAuthUser,
+  createSecuredProfileUpdate,
+} from './auth-user'
 import { createDefaultPasswordGenerator, provisionAccount, resetAccountPassword, type AccountDependencies } from './provision'
 import { createAdminClient } from '../supabase/admin'
 import { createClient } from '../supabase/server'
@@ -19,8 +23,8 @@ function accountDependencies(actorProfileId: string): AccountDependencies {
   const fail = (error: { message: string } | null) => { if (error) throw new Error(error.message) }
   return {
     findProfileByPhone: async (phone) => { const { data, error } = await client.from('profiles').select('id').eq('phone', phone).maybeSingle(); fail(error); return data ? { profileId: data.id } : null },
-    createAuthUser: async ({ phone, password, fullName }) => { const { data, error } = await client.auth.admin.createUser({ phone, password, phone_confirm: true, user_metadata: { full_name: fullName } }); fail(error); if (!data.user) throw new Error('Auth user creation failed.'); return { authId: data.user.id } },
-    secureProfile: async (authId, input) => { const { data, error } = await client.from('profiles').update({ full_name: input.fullName, phone: input.phone, role: input.role, must_change_password: true, is_active: true, created_by: actorProfileId }).eq('auth_id', authId).select('id').single(); fail(error); if (!data) throw new Error('Profile security update failed.'); return { profileId: data.id } },
+    createAuthUser: (input) => createConfirmedInternalAuthUser(client.auth.admin, input),
+    secureProfile: async (authId, input) => { const { data, error } = await client.from('profiles').update(createSecuredProfileUpdate(input, actorProfileId)).eq('auth_id', authId).select('id').single(); fail(error); if (!data) throw new Error('Profile security update failed.'); return { profileId: data.id } },
     deleteProfile: async (id) => { const { error } = await client.from('profiles').delete().eq('id', id); fail(error) },
     deleteAuthUser: async (id) => { const { error } = await client.auth.admin.deleteUser(id); fail(error) },
     recordAudit: async (event) => { const { error } = await client.from('admin_audit_log').insert({ actor_profile_id: actorProfileId, target_profile_id: event.targetProfileId, action: event.action, details: event.details ?? {} }); fail(error) },

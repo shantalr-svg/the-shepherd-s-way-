@@ -51,6 +51,12 @@ test('provisions a normalized phone account and returns its password once', asyn
     temporaryPassword: 'TemporaryPass1!xx',
   })
   assert.equal(events[0]?.name, 'auth-created')
+  assert.deepEqual(events[0]?.value, {
+    email: '263772829203@phone.invalid',
+    password: 'TemporaryPass1!xx',
+    fullName: 'Shantal Renco',
+  })
+  assert.doesNotMatch(JSON.stringify(result), /phone\.invalid/)
   assert.equal(events[1]?.name, 'profile-secured')
   assert.equal(events[2]?.name, 'audit')
   assert.doesNotMatch(JSON.stringify(events[2]), /TemporaryPass1!xx/)

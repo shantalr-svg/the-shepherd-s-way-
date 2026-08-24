@@ -3,11 +3,12 @@ import { isAbsolute, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
 import { normalizeZimbabwePhone } from '../src/lib/phone.ts'
+import { createConfirmedInternalAuthUser, createSecuredProfileUpdate } from '../src/lib/accounts/auth-user.ts'
 import { createDefaultPasswordGenerator, provisionAccount, type AccountDependencies } from '../src/lib/accounts/provision.ts'
 import type { ProvisionAccountInput } from '../src/lib/accounts/types.ts'
 
 type BootstrapDatabase = { public: { Tables: {
-  profiles: { Row: { id: string; auth_id: string | null; phone: string | null; is_active: boolean }; Insert: Record<string, unknown>; Update: { full_name?: string; phone?: string; role?: string; must_change_password?: boolean; is_active?: boolean }; Relationships: [] }
+  profiles: { Row: { id: string; auth_id: string | null; phone: string | null; is_active: boolean }; Insert: Record<string, unknown>; Update: { full_name?: string; phone?: string; email?: string | null; role?: string; must_change_password?: boolean; is_active?: boolean }; Relationships: [] }
   admin_audit_log: { Row: Record<string, unknown>; Insert: { target_profile_id: string; action: string; details: Record<string, unknown> }; Update: Record<string, never>; Relationships: [] }
 }; Views: Record<string, never>; Functions: Record<string, never>; Enums: Record<string, never>; CompositeTypes: Record<string, never> } }
 
@@ -31,8 +32,8 @@ function dependencies(client: ReturnType<typeof createClient<BootstrapDatabase>>
   const fail = (error: { message: string } | null) => { if (error) throw new Error(error.message) }
   return {
     findProfileByPhone: async (phone) => { const { data, error } = await client.from('profiles').select('id').eq('phone', phone).maybeSingle(); fail(error); return data ? { profileId: data.id } : null },
-    createAuthUser: async ({ phone, password, fullName }) => { const { data, error } = await client.auth.admin.createUser({ phone, password, phone_confirm: true, user_metadata: { full_name: fullName } }); fail(error); if (!data.user) throw new Error('Auth creation failed.'); return { authId: data.user.id } },
-    secureProfile: async (authId, input) => { const { data, error } = await client.from('profiles').update({ full_name: input.fullName, phone: input.phone, role: input.role, must_change_password: true, is_active: true }).eq('auth_id', authId).select('id').single(); fail(error); if (!data) throw new Error('Profile update failed.'); return { profileId: data.id } },
+    createAuthUser: (input) => createConfirmedInternalAuthUser(client.auth.admin, input),
+    secureProfile: async (authId, input) => { const { data, error } = await client.from('profiles').update(createSecuredProfileUpdate(input)).eq('auth_id', authId).select('id').single(); fail(error); if (!data) throw new Error('Profile update failed.'); return { profileId: data.id } },
     deleteProfile: async (id) => { const { error } = await client.from('profiles').delete().eq('id', id); fail(error) },
     deleteAuthUser: async (id) => { const { error } = await client.auth.admin.deleteUser(id); fail(error) },
     recordAudit: async (event) => { const { error } = await client.from('admin_audit_log').insert({ target_profile_id: event.targetProfileId, action: event.action, details: event.details ?? {} }); fail(error) },
