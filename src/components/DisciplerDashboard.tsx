@@ -2,12 +2,17 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Profile } from '@/types/database'
+import type { Enrollment, Profile, Track } from '@/types/database'
 import { useRouter } from 'next/navigation'
 
 interface Props {
   profile: Profile
-  enrollments: any[]
+  enrollments: DisciplerEnrollment[]
+}
+
+type DisciplerEnrollment = Enrollment & {
+  disciple: Profile | null
+  track: Pick<Track, 'title' | 'order_index'> | null
 }
 
 export default function DisciplerDashboard({ profile, enrollments }: Props) {

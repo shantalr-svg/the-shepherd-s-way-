@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import type { Profile, Track, UserRole } from '@/types/database'
+import { createClient } from '@/lib/supabase/client'
+import type { Enrollment, Profile, Track, UserRole } from '@/types/database'
 import { useRouter } from 'next/navigation'
 import AccountManagement from '@/components/AccountManagement'
 
@@ -9,15 +10,18 @@ interface Props {
   adminName: string
   profiles: Profile[]
   tracks: Track[]
-  enrollments: any[]
+  enrollments: AdminEnrollment[]
+}
+
+type AdminEnrollment = Enrollment & {
+  disciple: Pick<Profile, 'full_name' | 'phone'> | null
+  discipler: Pick<Profile, 'full_name'> | null
+  track: Pick<Track, 'title'> | null
 }
 
 export default function AdminDashboard({ adminName, profiles, tracks, enrollments }: Props) {
   const router = useRouter()
-  const getSupabase = () => {
-    const { createClient } = require('@/lib/supabase/client')
-    return createClient()
-  }
+  const getSupabase = () => createClient()
 
   const [tab, setTab] = useState<'accounts' | 'people' | 'enrollments' | 'tracks'>('accounts')
   const [showInvite, setShowInvite] = useState(false)
@@ -280,7 +284,7 @@ export default function AdminDashboard({ adminName, profiles, tracks, enrollment
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {enrollments.map((e: any) => (
+                  {enrollments.map((e) => (
                     <tr key={e.id} className="hover:bg-stone-50">
                       <td className="px-4 py-3 font-medium text-stone-900">{e.disciple?.full_name}</td>
                       <td className="px-4 py-3 text-stone-600">{e.discipler?.full_name}</td>
