@@ -1,4 +1,4 @@
-# Phone Authentication and Initial User Bootstrap Design
+# No-Cost Phone-Number Login and Initial User Bootstrap Design
 
 **Date:** 2026-08-21
 
@@ -6,9 +6,9 @@
 
 ## Purpose
 
-Convert The Shepherd's Way from email-based access to Zimbabwean phone-number and password authentication, establish a reproducible Supabase database, and securely provision the first 20 users: two administrators and 18 disciplers.
+Convert The Shepherd's Way from visible email-based access to Zimbabwean phone-number and password login, establish a reproducible Supabase database, and securely provision the first 20 users: two administrators and 18 disciplers.
 
-This phase does not add disciples or paid SMS delivery. It preserves a clean upgrade path to SMS or WhatsApp one-time-password authentication later.
+This phase does not add disciples or paid SMS delivery. Hosted Supabase phone authentication requires a configured SMS provider, so the no-cost phase uses confirmed internal email-style Auth identifiers derived from normalized phone numbers. The internal identifier is an implementation detail: users and administrators continue to work only with phone numbers. The design preserves a clean upgrade path to native phone or WhatsApp authentication later.
 
 ## Product Decisions
 
@@ -71,20 +71,30 @@ Clients may not update or delete audit entries. Administrators may read them; tr
 
 ### Supabase Configuration
 
-Phone authentication is enabled in the hosted Supabase Auth Providers settings. No paid SMS provider is required for phase one because users do not self-register or verify by SMS.
+Supabase's Email provider remains enabled, the Phone provider remains disabled, and public signup remains disabled. No paid SMS provider is required in phase one because all Auth users are created by trusted server code and their internal identifiers are confirmed at creation.
+
+The shared phone module converts each normalized phone number into one deterministic Auth-only email address using the reserved `.invalid` namespace:
+
+```text
++263772829203 -> 263772829203@phone.invalid
+```
+
+The mapping is deterministic so login and account provisioning calculate the same identifier without storing an additional secret. It is not presented as a contact address, returned by administrator APIs, written to audit details, or displayed in the application. Predictability does not grant access because the identifier is equivalent to a username and authentication still requires the password. Existing login rate limits and generic authentication errors continue to protect against enumeration and guessing.
 
 The server provisions users with `auth.admin.createUser` using:
 
-- normalized phone
+- the derived Auth-only email identifier
 - generated temporary password
-- `phone_confirm: true`
+- `email_confirm: true`
 - non-authoritative display-name metadata only
+
+The Auth trigger initially receives the internal email address. The trusted profile-securing step links the generated Auth ID, stores the normalized phone, assigns the approved role and lifecycle state, and clears the synthetic address from `profiles.email`. The internal identifier remains only in Supabase Auth, where it is required for password login.
 
 The Supabase service-role key is available only to server code and deployment configuration. It is never prefixed with `NEXT_PUBLIC_`, returned to clients, logged, or committed.
 
 ### Login
 
-The login form accepts a Zimbabwean local or E.164 phone number and a password. A shared, tested normalization function converts valid inputs to E.164 before calling `signInWithPassword({ phone, password })`.
+The login form accepts a Zimbabwean local or E.164 phone number and a password. A shared, tested function normalizes valid input to E.164, derives the internal Auth identifier, and calls `signInWithPassword({ email: internalIdentifier, password })`. The interface never asks for or displays an email address.
 
 Supported examples include `0772829203`, `263772829203`, and `+263772829203`. Invalid lengths, unsupported country codes, alphabetic input, and malformed values are rejected before an authentication request.
 
@@ -185,6 +195,7 @@ Because Auth and application tables cannot share a single PostgreSQL transaction
 - Audit records are append-only for clients.
 - Password policy is enforced at creation and replacement.
 - Rate limiting is added to login and privileged account routes where supported by the deployment environment.
+- Internal Auth identifiers are treated as usernames, never as contact addresses, and are omitted from application responses, profile displays, audit details, and credential reports.
 - Phone-number recycling risk is documented; SMS OTP or MFA remains the planned future mitigation.
 
 ## Testing
@@ -192,8 +203,10 @@ Because Auth and application tables cannot share a single PostgreSQL transaction
 Automated coverage includes:
 
 - Zimbabwean phone normalization and rejection cases
+- deterministic phone-to-Auth-identifier mapping
 - duplicate phone prevention
-- phone/password login payloads
+- phone-form login producing the correct internal email/password Auth payload
+- account provisioning producing confirmed internal-email Auth users without exposing the identifier
 - forced first-login redirects and completion
 - inactive-user denial
 - server-only service-role use
@@ -213,7 +226,7 @@ Verification runs the focused security tests, full test suite, TypeScript, lint,
 1. Merge Security Patch 1.
 2. Create and configure the Supabase project.
 3. Test all migrations on a disposable local or staging database.
-4. Configure phone authentication and disable public signup.
+4. Keep email/password authentication enabled, keep native phone authentication disabled, and disable public signup.
 5. Add Supabase public and service-role environment variables to Vercel Preview.
 6. Deploy the phone-auth branch to Preview.
 7. Apply migrations to the linked Supabase project after a dry run.
@@ -226,11 +239,12 @@ Environment-variable changes require a new deployment. No production credential 
 
 ## Future SMS Upgrade
 
-When funding is available, configure a supported SMS or WhatsApp provider and add OTP login. Existing E.164 phone identities, profiles, roles, enrollments, and audit history remain unchanged. Password login can coexist during rollout and be retired only after successful user verification.
+When funding is available, configure a supported SMS or WhatsApp provider and add native phone identities to the existing Auth users through trusted administrator tooling. Auth IDs, profiles, roles, enrollments, and audit history remain unchanged. Internal-identifier password login can coexist during rollout and be retired only after successful phone verification. The migration must detect conflicts, preserve rollback information, and never infer that possession of the temporary password proves current ownership of the phone number.
 
 ## Acceptance Criteria
 
-- Phone-only users can sign in with Zimbabwean numbers and passwords.
+- Phone-only users can sign in with Zimbabwean numbers and passwords without an SMS provider.
+- Internal Auth identifiers are never shown as contact addresses or exposed by application APIs and reports.
 - Every newly provisioned user must change the temporary password before dashboard access.
 - Either administrator can create another administrator.
 - A sixth active administrator is rejected even under concurrent requests.
